@@ -1,6 +1,7 @@
+"use client";
+
 import React from 'react';
-import { Search, BookOpen, LayoutDashboard, List } from 'lucide-react';
-import { Input } from '@/components/ui/button';
+import { Search, BookOpen } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
