@@ -5,7 +5,6 @@ import Flashcard from '../components/Flashcard';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
 import { Trophy, BookOpen, Target, ArrowRight } from 'lucide-react';
-import { MadeWithDyad } from '@/components/made-with-dyad';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
@@ -98,7 +97,6 @@ const Index = () => {
           )}
         </div>
       </main>
-      <MadeWithDyad />
     </div>
   );
 };

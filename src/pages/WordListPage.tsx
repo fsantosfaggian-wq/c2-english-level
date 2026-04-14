@@ -2,7 +2,6 @@ import React from 'react';
 import { useVocabulary } from '../hooks/use-vocabulary';
 import Navbar from '../components/Navbar';
 import VocabularyList from '../components/VocabularyList';
-import { MadeWithDyad } from '@/components/made-with-dyad';
 
 const WordListPage = () => {
   const { filteredWords, searchQuery, setSearchQuery, updateStatus } = useVocabulary();
@@ -19,7 +18,6 @@ const WordListPage = () => {
         </div>
         <VocabularyList words={filteredWords} onStatusUpdate={updateStatus} />
       </main>
-      <MadeWithDyad />
     </div>
   );
 };
