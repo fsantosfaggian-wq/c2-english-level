@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Word, WordStatus } from '../hooks/use-vocabulary';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, RotateCcw, Eye, Volume2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useSpeech } from '@/hooks/use-speech';
 
 interface FlashcardProps {
   word: Word;
@@ -13,11 +12,41 @@ interface FlashcardProps {
   onNext: () => void;
 }
 
+let cachedVoice: SpeechSynthesisVoice | null = null;
+
+const getEnglishVoice = (): SpeechSynthesisVoice | null => {
+  if (cachedVoice && window.speechSynthesis.getVoices().includes(cachedVoice)) {
+    return cachedVoice;
+  }
+  
+  const voices = window.speechSynthesis.getVoices();
+  const preferredVoice = voices.find(v => 
+    v.lang === 'en-US' && (v.name.includes('Google') || v.name.includes('Microsoft'))
+  );
+  
+  if (preferredVoice) {
+    cachedVoice = preferredVoice;
+    return preferredVoice;
+  }
+  
+  const fallbackVoice = voices.find(v => v.lang === 'en-US');
+  if (fallbackVoice) {
+    cachedVoice = fallbackVoice;
+    return fallbackVoice;
+  }
+  
+  return null;
+};
+
 const speakText = (text: string, setSpeaking: (val: boolean) => void) => {
   if (!text) return;
   
   window.speechSynthesis.cancel();
   const utterance = new SpeechSynthesisUtterance(text);
+  const voice = getEnglishVoice();
+  if (voice) {
+    utterance.voice = voice;
+  }
   utterance.lang = 'en-US';
   utterance.rate = 0.9;
   utterance.pitch = 1;
@@ -30,21 +59,103 @@ const speakText = (text: string, setSpeaking: (val: boolean) => void) => {
 };
 
 const Flashcard = ({ word, onStatusUpdate, onNext }: FlashcardProps) => {
-  const [isFlipped, setIsFlipped] = useState(false);
+  const [isRevealed, setIsRevealed] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [isWordSpeaking, setIsWordSpeaking] = useState(false);
   const [isDefinitionSpeaking, setIsDefinitionSpeaking] = useState(false);
   const [isExampleSpeaking, setIsExampleSpeaking] = useState(false);
-  const { speak, isSpeaking, isLoading } = useSpeech();
+  const isPlayingRef = useRef(false);
+
+  useEffect(() => {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => {
+      cachedVoice = null;
+      getEnglishVoice();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
       window.speechSynthesis.cancel();
+      isPlayingRef.current = false;
     };
   }, [word.id]);
 
+  useEffect(() => {
+    setIsRevealed(false);
+    setIsVisible(true);
+    isPlayingRef.current = false;
+    window.speechSynthesis.cancel();
+  }, [word.id]);
+
+  const playAudioSequence = useCallback(async () => {
+    if (isPlayingRef.current) return;
+    isPlayingRef.current = true;
+    
+    const voice = getEnglishVoice();
+    if (!voice) {
+      isPlayingRef.current = false;
+      return;
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    setIsWordSpeaking(true);
+    window.speechSynthesis.cancel();
+    const wordUtterance = new SpeechSynthesisUtterance(word.word);
+    wordUtterance.voice = voice;
+    wordUtterance.lang = 'en-US';
+    wordUtterance.rate = 0.9;
+    wordUtterance.pitch = 1;
+    wordUtterance.onend = () => setIsWordSpeaking(false);
+    wordUtterance.onerror = () => setIsWordSpeaking(false);
+    window.speechSynthesis.speak(wordUtterance);
+    
+    const wordDuration = Math.max(1500, word.word.length * 80);
+    await new Promise(resolve => setTimeout(resolve, wordDuration + 400));
+
+    setIsDefinitionSpeaking(true);
+    const defUtterance = new SpeechSynthesisUtterance(word.definition);
+    defUtterance.voice = voice;
+    defUtterance.lang = 'en-US';
+    defUtterance.rate = 0.9;
+    defUtterance.pitch = 1;
+    defUtterance.onend = () => setIsDefinitionSpeaking(false);
+    defUtterance.onerror = () => setIsDefinitionSpeaking(false);
+    window.speechSynthesis.speak(defUtterance);
+    
+    const defDuration = Math.max(2500, word.definition.length * 50);
+    await new Promise(resolve => setTimeout(resolve, defDuration + 400));
+
+    setIsExampleSpeaking(true);
+    const exUtterance = new SpeechSynthesisUtterance(word.example_sentence);
+    exUtterance.voice = voice;
+    exUtterance.lang = 'en-US';
+    exUtterance.rate = 0.9;
+    exUtterance.pitch = 1;
+    exUtterance.onend = () => {
+      setIsExampleSpeaking(false);
+      isPlayingRef.current = false;
+    };
+    exUtterance.onerror = () => {
+      setIsExampleSpeaking(false);
+      isPlayingRef.current = false;
+    };
+    window.speechSynthesis.speak(exUtterance);
+  }, [word.word, word.definition, word.example_sentence]);
+
+  const handleReveal = () => {
+    setIsRevealed(true);
+    playAudioSequence();
+  };
+
   const handleSpeak = () => {
-    speak(word.word);
+    if (isWordSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsWordSpeaking(false);
+      return;
+    }
+    speakText(word.word, setIsWordSpeaking);
   };
 
   const handleSpeakDefinition = () => {
@@ -65,16 +176,9 @@ const Flashcard = ({ word, onStatusUpdate, onNext }: FlashcardProps) => {
     speakText(word.example_sentence, setIsExampleSpeaking);
   };
 
-  // Reset flip state when word changes
-  useEffect(() => {
-    setIsFlipped(false);
-    setIsVisible(true);
-  }, [word.id]);
-
   const handleStatus = (status: WordStatus) => {
     setIsVisible(false);
-    // Small delay to allow exit animation if we had one, 
-    // but here we just update and the parent handles the next word
+    window.speechSynthesis.cancel();
     setTimeout(() => {
       onStatusUpdate(word.id, status);
       onNext();
@@ -96,7 +200,7 @@ const Flashcard = ({ word, onStatusUpdate, onNext }: FlashcardProps) => {
               <CardTitle className="text-4xl md:text-5xl font-serif font-bold tracking-tight text-primary">
                 {word.word}
               </CardTitle>
-              {word.translation && (
+              {isRevealed && word.translation && (
                 <p className="text-gray-500 text-sm italic">
                   {word.translation}
                 </p>
@@ -106,24 +210,33 @@ const Flashcard = ({ word, onStatusUpdate, onNext }: FlashcardProps) => {
               variant="ghost"
               size="icon"
               onClick={handleSpeak}
-              disabled={isLoading}
               className={cn(
                 "rounded-full hover:bg-primary/10 transition-all",
-                isSpeaking && "animate-pulse text-primary"
+                isWordSpeaking && "animate-pulse text-primary"
               )}
               aria-label="Listen to pronunciation"
             >
-              <Volume2 className={cn("h-6 w-6", isSpeaking && "animate-bounce")} />
+              <Volume2 className={cn("h-6 w-6", isWordSpeaking && "animate-bounce")} />
             </Button>
           </div>
         </CardHeader>
 
         <CardContent className="flex-grow flex flex-col items-center justify-center px-6 md:px-8 text-center">
-          <div className={cn(
-            "transition-all duration-500 w-full",
-            isFlipped ? "opacity-100 scale-100" : "opacity-0 scale-95 absolute pointer-events-none"
-          )}>
-            <div className="space-y-5">
+          {!isRevealed ? (
+            <Button 
+              variant="outline"
+              className="h-20 w-48 md:h-24 md:w-56 rounded-full hover:bg-primary/5 group transition-transform hover:scale-105 border-2 border-dashed"
+              onClick={handleReveal}
+            >
+              <div className="flex flex-col items-center gap-1">
+                <Eye className="h-8 w-8 md:h-10 md:w-10 text-muted-foreground group-hover:text-primary transition-colors" />
+                <span className="text-xs md:text-sm font-medium text-muted-foreground group-hover:text-primary">
+                  Show Answer
+                </span>
+              </div>
+            </Button>
+          ) : (
+            <div className="w-full space-y-5">
               <div className="space-y-2">
                 <div className="flex items-center justify-center gap-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Definition</p>
@@ -171,16 +284,6 @@ const Flashcard = ({ word, onStatusUpdate, onNext }: FlashcardProps) => {
                 )}
               </div>
             </div>
-          </div>
-
-          {!isFlipped && (
-            <Button 
-              variant="ghost" 
-              className="h-20 w-20 md:h-24 md:w-24 rounded-full hover:bg-primary/5 group transition-transform hover:scale-110 mt-4"
-              onClick={() => setIsFlipped(true)}
-            >
-              <Eye className="h-8 w-8 md:h-10 md:w-10 text-muted-foreground group-hover:text-primary transition-colors" />
-            </Button>
           )}
         </CardContent>
 
