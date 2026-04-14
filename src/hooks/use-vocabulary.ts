@@ -8,6 +8,9 @@ export interface Word {
   word: string;
   definition: string;
   example_sentence: string;
+  translation?: string;
+  definition_pt?: string;
+  example_pt?: string;
   level: string;
   status: WordStatus;
 }
