@@ -1,0 +1,9 @@
+# C2 Vocabulary Input Words
+# Add one word per line (no duplicates will be processed)
+# Lines starting with # are ignored
+
+# Example format:
+# serendipity
+# ennui
+# pulchritude
+# sesquipedalian

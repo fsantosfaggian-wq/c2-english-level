@@ -1,5 +1,13 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { User } from 'firebase/auth';
 import initialData from '../data/vocabulary.json';
+import { 
+  signInWithGoogle, 
+  logOut, 
+  subscribeToAuthState,
+  saveProgressToCloud,
+  loadProgressFromCloud
+} from '../lib/firebase';
 
 export type WordStatus = 'learned' | 'learning' | 'not_started';
 
@@ -20,31 +28,93 @@ const STORAGE_KEY = 'c2_vocabulary_progress';
 export function useVocabulary() {
   const [words, setWords] = useState<Word[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
-  // Initialize data from LocalStorage or JSON
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setWords(JSON.parse(saved));
-      } catch (e) {
+    const unsubscribe = subscribeToAuthState((authUser) => {
+      setUser(authUser);
+      setIsLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const initData = async () => {
+      if (user) {
+        setSyncStatus('syncing');
+        try {
+          const cloudProgress = await loadProgressFromCloud(user.uid);
+          if (cloudProgress) {
+            setWords(cloudProgress);
+            setSyncStatus('synced');
+            return;
+          }
+        } catch (error) {
+          console.error('Cloud load failed, using local:', error);
+        }
+      }
+
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          setWords(JSON.parse(saved));
+        } catch (e) {
+          setWords(initialData as Word[]);
+        }
+      } else {
         setWords(initialData as Word[]);
       }
-    } else {
-      setWords(initialData as Word[]);
+      setSyncStatus('idle');
+    };
+
+    initData();
+  }, [user]);
+
+  useEffect(() => {
+    if (words.length === 0 || isLoading) return;
+
+    const saveProgress = async () => {
+      if (user) {
+        setSyncStatus('syncing');
+        try {
+          await saveProgressToCloud(user.uid, words);
+          setSyncStatus('synced');
+        } catch (error) {
+          console.error('Cloud save failed:', error);
+          setSyncStatus('error');
+        }
+      } else {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+        setSyncStatus('idle');
+      }
+    };
+
+    saveProgress();
+  }, [words, user, isLoading]);
+
+  const updateStatus = useCallback((id: number, status: WordStatus) => {
+    setWords(prev => prev.map(w => w.id === id ? { ...w, status } : w));
+  }, []);
+
+  const handleSignIn = useCallback(async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Sign in error:', error);
+      throw error;
     }
   }, []);
 
-  // Save to LocalStorage whenever words change
-  useEffect(() => {
-    if (words.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(words));
+  const handleSignOut = useCallback(async () => {
+    try {
+      await logOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+      throw error;
     }
-  }, [words]);
-
-  const updateStatus = (id: number, status: WordStatus) => {
-    setWords(prev => prev.map(w => w.id === id ? { ...w, status } : w));
-  };
+  }, []);
 
   const filteredWords = useMemo(() => {
     return words.filter(w => 
@@ -66,6 +136,11 @@ export function useVocabulary() {
     searchQuery,
     setSearchQuery,
     updateStatus,
-    stats
+    stats,
+    user,
+    isLoading,
+    syncStatus,
+    signIn: handleSignIn,
+    signOut: handleSignOut
   };
 }

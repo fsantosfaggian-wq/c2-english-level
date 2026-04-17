@@ -2,14 +2,15 @@ import React, { useState, useMemo } from 'react';
 import { useVocabulary } from '../hooks/use-vocabulary';
 import Navbar from '../components/Navbar';
 import Flashcard from '../components/Flashcard';
+import AuthButton from '../components/AuthButton';
 import { Progress } from '@/components/ui/progress';
 import { Card, CardContent } from '@/components/ui/card';
-import { Trophy, BookOpen, Target, ArrowRight } from 'lucide-react';
+import { Trophy, BookOpen, Target, ArrowRight, Cloud, CloudOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
 const Index = () => {
-  const { words, searchQuery, setSearchQuery, updateStatus, stats } = useVocabulary();
+  const { words, searchQuery, setSearchQuery, updateStatus, stats, user, signIn, signOut, syncStatus, isLoading } = useVocabulary();
   const [currentIndex, setCurrentIndex] = useState(0);
 
   // Get words that are not yet learned for the flashcard session
@@ -22,7 +23,15 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-slate-50/50">
-      <Navbar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
+      <Navbar 
+        searchQuery={searchQuery} 
+        setSearchQuery={setSearchQuery}
+        user={user}
+        onSignIn={signIn}
+        onSignOut={signOut}
+        syncStatus={syncStatus}
+        isLoading={isLoading}
+      />
       
       <main className="container mx-auto px-4 py-8 md:py-12 max-w-6xl">
         {/* Progress Dashboard */}

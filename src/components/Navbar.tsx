@@ -1,16 +1,23 @@
 "use client";
 
 import React from 'react';
-import { Search, BookOpen } from 'lucide-react';
+import { Search, BookOpen, Cloud, CloudOff } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { AuthButton } from './AuthButton';
+import { User } from 'firebase/auth';
 
 interface NavbarProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  user: User | null;
+  onSignIn: () => void;
+  onSignOut: () => void;
+  syncStatus?: 'idle' | 'syncing' | 'synced' | 'error';
+  isLoading?: boolean;
 }
 
-const Navbar = ({ searchQuery, setSearchQuery }: NavbarProps) => {
+const Navbar = ({ searchQuery, setSearchQuery, user, onSignIn, onSignOut, syncStatus, isLoading }: NavbarProps) => {
   const location = useLocation();
 
   return (
@@ -46,6 +53,18 @@ const Navbar = ({ searchQuery, setSearchQuery }: NavbarProps) => {
         </div>
 
         <div className="flex flex-1 items-center justify-end space-x-4">
+          {syncStatus && (
+            <div className="flex items-center text-xs text-muted-foreground" title={syncStatus === 'synced' ? 'Sincronizado na nuvem' : syncStatus === 'syncing' ? 'Sincronizando...' : 'Salvo localmente'}>
+              {user ? (
+                syncStatus === 'synced' ? <Cloud className="h-4 w-4 text-green-500" /> : 
+                syncStatus === 'syncing' ? <Cloud className="h-4 w-4 animate-pulse text-blue-500" /> :
+                <CloudOff className="h-4 w-4 text-amber-500" />
+              ) : (
+                <CloudOff className="h-4 w-4 text-muted-foreground/50" />
+              )}
+            </div>
+          )}
+          
           <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -56,6 +75,13 @@ const Navbar = ({ searchQuery, setSearchQuery }: NavbarProps) => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+          
+          <AuthButton 
+            user={user} 
+            onSignIn={onSignIn} 
+            onSignOut={onSignOut}
+            isLoading={isLoading}
+          />
         </div>
       </div>
     </nav>
